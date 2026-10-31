@@ -1,0 +1,48 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" />
+  <title>Group Poop</title>
+  <meta name="theme-color" content="#2a1440" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="apple-mobile-web-app-title" content="Group Poop" />
+  <link rel="apple-touch-icon" href="icons/icon-180.png" />
+  <link rel="icon" type="image/png" href="icons/icon-192.png" />
+  <link rel="manifest" href="manifest.webmanifest" />
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <canvas id="game"></canvas>
+
+  <div id="setup" class="hidden">
+    <div class="panel">
+      <div class="row label">How many humans are playing?</div>
+      <div class="row seg" id="humans">
+        <button data-n="1" class="on">1</button><button data-n="2">2</button><button data-n="3">3</button><button data-n="4">4</button>
+      </div>
+      <div id="slots"></div>
+      <div class="row label">Computer players</div>
+      <div class="row seg" id="diff">
+        <button data-d="easy">Easy</button><button data-d="normal" class="on">Normal</button><button data-d="hard">Hard</button>
+      </div>
+      <button id="start" class="big">START!</button>
+      <div class="hint">Pass the phone between turns. Everyone's results stay secret until the big reveal!</div>
+      <div class="row tiny">
+        <button id="mute" class="link">Sound: ON</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="js/core.js"></script>
+  <script src="js/art.js"></script>
+  <script src="js/games/stack.js"></script>
+  <script src="js/games/paint.js"></script>
+  <script src="js/games/germs.js"></script>
+  <script src="js/games/squeeze.js"></script>
+  <script src="js/scenes.js"></script>
+  <script src="js/main.js"></script>
+</body>
+</html>
