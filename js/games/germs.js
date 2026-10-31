@@ -5,6 +5,8 @@
   const GP = window.GP, W = GP.W, H = GP.H;
   const AREA = { x: 30, y: 130, w: W - 60, h: 760 };
   const N_GOOD = 12;
+  // friends live inside this ellipse, well away from where germs sneak in
+  const SAFE = { cx: W / 2, cy: 500, rx: 145, ry: 250 };
 
   function drawGood(ctx, g, t) {
     const r = g.r, bob = Math.sin(t * 4 + g.seed) * 2;
@@ -60,7 +62,7 @@
       const tints = ['#7cf29a', '#9df5b0', '#6fe3a0', '#b4f78f'];
       for (let i = 0; i < N_GOOD; i++) {
         this.goods.push({
-          x: AREA.x + 120 + this.rng() * (AREA.w - 240), y: AREA.y + 200 + this.rng() * (AREA.h - 400),
+          x: SAFE.cx + (this.rng() - 0.5) * SAFE.rx * 1.2, y: SAFE.cy + (this.rng() - 0.5) * SAFE.ry * 1.2,
           vx: 0, vy: 0, r: 20, seed: this.rng() * 10, tint: tints[i % 4], scared: 0, wander: this.rng() * 6,
         });
       }
@@ -132,18 +134,23 @@
         this.spawnT -= dt;
         if (this.spawnT <= 0) { this.spawnBad(); this.spawnT = Math.max(0.42, 1.15 - this.t * 0.03) * this.rng.range(0.7, 1.2); }
       }
-      // friendly bugs wander
+      // friendly bugs zip around, but always stay in the safe middle zone
+      // (never out by the edges, so there's always time to save them)
+      const damp = Math.pow(0.94, dt * 60);
       for (const g of this.goods) {
-        g.wander += dt * this.rng.range(-2, 2);
-        g.vx += Math.cos(g.wander) * 60 * dt; g.vy += Math.sin(g.wander) * 60 * dt;
-        g.vx *= 0.96; g.vy *= 0.96;
+        g.wander += dt * this.rng.range(-3, 3);
+        g.vx += Math.cos(g.wander) * 260 * dt; g.vy += Math.sin(g.wander) * 260 * dt;
         g.scared = Math.max(0, g.scared - dt);
         for (const b of this.bads) {
           const d = Math.hypot(g.x - b.x, g.y - b.y);
-          if (d < 110) { g.scared = 0.3; g.vx += ((g.x - b.x) / d) * 90 * dt; g.vy += ((g.y - b.y) / d) * 90 * dt; }
+          if (d < 110) { g.scared = 0.3; g.vx += ((g.x - b.x) / d) * 120 * dt; g.vy += ((g.y - b.y) / d) * 120 * dt; }
         }
-        g.x = GP.clamp(g.x + g.vx * dt, AREA.x + 70, AREA.x + AREA.w - 70);
-        g.y = GP.clamp(g.y + g.vy * dt, AREA.y + 90, AREA.y + AREA.h - 110);
+        const nx = (g.x - SAFE.cx) / SAFE.rx, ny = (g.y - SAFE.cy) / SAFE.ry, d = Math.hypot(nx, ny);
+        if (d > 0.85) { g.vx -= nx / d * 600 * (d - 0.85) * dt * 4; g.vy -= ny / d * 600 * (d - 0.85) * dt * 4; }
+        g.vx *= damp; g.vy *= damp;
+        g.x += g.vx * dt; g.y += g.vy * dt;
+        const d2 = Math.hypot((g.x - SAFE.cx) / SAFE.rx, (g.y - SAFE.cy) / SAFE.ry);
+        if (d2 > 1) { g.x = SAFE.cx + (g.x - SAFE.cx) / d2; g.y = SAFE.cy + (g.y - SAFE.cy) / d2; }
       }
       // germs chase the nearest friend
       for (const b of this.bads.slice()) {

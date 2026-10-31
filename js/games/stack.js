@@ -1,6 +1,6 @@
 // Stage 1 — THE STOMACH: "Snack Stack"
-// Snacks swing overhead. Tap to drop them into the stomach. Pack it full —
-// but the stomach gurgles, and anything that spills over the rim is lost.
+// Snacks swing overhead. Tap to drop them into the stomach. Pack it full!
+// Miss the stomach and it RUMBLES, shaking food out. The fuller it gets, the faster the spoon swings.
 (function () {
   const GP = window.GP, W = GP.W, H = GP.H;
   const FOODS = [
@@ -76,7 +76,7 @@
       this.bodies = []; this.spilled = 0; this.spillList = [];
       this.phase = this.rng() * 6; this.dropX = this.cx; this.dropVx = 0; this.cool = 0;
       this.next = this.pickFood();
-      this.gurgleT = 4 + this.rng() * 2; this.gurgleAnim = 0; this.gurgleWarn = 0;
+      this.gurgleT = 0; this.gurgleAnim = 0; this.gurgleWarn = 0; this.misses = 0; this.missFlash = 0; this.sp = 1.6;
       this.parts = new GP.Particles();
       this.acc = 0; this.drops = 0;
       this.botTarget = null; this.botWait = 0.5;
@@ -87,13 +87,20 @@
       for (const b of this.bodies) if (b.y > this.rimY + 2 && Math.abs(b.x - this.cx) < this.rx) n++;
       return n;
     }
+    onMiss() {
+      this.misses++; this.missFlash = 0.8;
+      this.sfx('miss');
+      if (!this.gurgleWarn && this.gurgleAnim <= 0 && this.t < this.duration) {
+        this.gurgleWarn = 1; this.gurgleT = 0.45; this.sfx('gurgle');
+      }
+    }
     drop() {
       if (this.cool > 0 || this.t >= this.duration) return;
       const f = this.next, x = this.dropX, y = 190;
-      const vx = this.dropVx * 0.4 / 120;
-      this.bodies.push({ f, r: f.r, x, y, px: x - vx, py: y, rot: 0 });
+      const vx = this.dropVx * 0.15 / 120;
+      this.bodies.push({ f, r: f.r, x, y, px: x - vx, py: y, rot: 0, fresh: true });
       this.next = this.pickFood();
-      this.cool = 0.36; this.drops++;
+      this.cool = 0.24; this.drops++;
       this.sfx('drop');
     }
     down() { this.drop(); }
@@ -101,12 +108,14 @@
       if (this.t >= this.duration) return;
       if (this.botWait > 0) { this.botWait -= dt; return; }
       const sk = this.skill;
+      // smart bots ease off when the stomach is nearly full
+      if (this.inside > 38 + sk * 6 && this.rng() < sk) { this.botWait = 0.4; return; }
       // aim: drop while the spoon is over the stomach; sloppier bots misjudge the edges
-      const land = this.dropX + this.dropVx * 0.4 * 0.32;
+      const land = this.dropX + this.dropVx * 0.15 * 0.55;
       const reach = this.rx - 30 + (1 - sk) * this.rng.range(-20, 90);
       if (this.cool <= 0 && Math.abs(land - this.cx) < reach) {
         this.drop();
-        this.botWait = this.rng.range(0, 0.1 + (1 - sk) * 0.9);
+        this.botWait = this.rng.range(0, 0.05 + (1 - sk) * 0.8);
       }
     }
     physics(h) {
@@ -168,30 +177,38 @@
       this.t += dt;
       if (this.skill != null) this.botThink(dt);
       this.cool -= dt;
-      const sp = 1.7 + this.t * 0.045;
+      // the fuller the stomach, the faster the spoon swings
+      const fill = GP.clamp(this.inside / 38, 0, 1);
+      this.sp += (1.6 + fill * 1.9 - this.sp) * Math.min(1, dt * 2);
+      const sp = this.sp;
       this.phase += dt * sp;
       this.dropX = this.cx + Math.sin(this.phase) * 205;
       this.dropVx = Math.cos(this.phase) * 205 * sp;
-      // gurgles
-      if (this.t < this.duration) {
+      // a missed drop makes the stomach RUMBLE (after a short wobble warning)
+      if (this.gurgleWarn) {
         this.gurgleT -= dt;
-        if (this.gurgleT < 0.7 && this.gurgleWarn === 0) { this.gurgleWarn = 1; this.sfx('gurgle'); }
         if (this.gurgleT <= 0) {
-          const power = 1 + this.t / 30;
+          const power = 1 + fill * 0.6;
           for (const b of this.bodies) {
-            if (b.y > this.rimY - 80) {
-              b.py += this.rng.range(2.5, 5.5) * power;
+            if (b.y > this.rimY - 80 && Math.abs(b.x - this.cx) < this.rx + 20) {
+              b.py += this.rng.range(3.5, 6.5) * power;
               b.px += this.rng.range(-1.5, 1.5) * power;
             }
           }
           this.gurgleAnim = 0.6; this.gurgleWarn = 0;
-          this.gurgleT = this.rng.range(3.6, 5.2);
           for (let i = 0; i < 10; i++) this.parts.add({ x: this.cx + this.rng.range(-this.rx, this.rx) * 0.8, y: this.top + this.ry * 0.7, vy: -this.rng.range(60, 180), vx: this.rng.range(-30, 30), life: 0.9, size: this.rng.range(5, 12), color: 'rgba(255,255,255,0.7)', shape: 'ring' });
         }
       }
       this.gurgleAnim = Math.max(0, this.gurgleAnim - dt);
+      this.missFlash = Math.max(0, this.missFlash - dt);
       this.acc += dt;
       while (this.acc >= 1 / 120) { this.physics(1 / 120); this.acc -= 1 / 120; }
+      // did a freshly dropped snack land in the stomach, or miss it?
+      for (const b of this.bodies) {
+        if (!b.fresh) continue;
+        if (b.y > this.rimY + 5 && Math.abs(b.x - this.cx) < this.rx) b.fresh = false;
+        else if (b.y > this.rimY + 10 && Math.abs(b.x - this.cx) > this.rx + 5) { b.fresh = false; this.onMiss(); }
+      }
       this.parts.update(dt);
       if (this.t >= this.duration) {
         this.post += dt;
@@ -202,7 +219,7 @@
       this.finished = true;
       const n = this.inside;
       this.packed = n;
-      this.score = Math.round(GP.clamp((n / 38) * 100, 0, 100));
+      this.score = Math.round(GP.clamp((n / 46) * 100, 0, 100));
       this.summary = `${n} snacks packed · ${this.spilled} spilled`;
     }
     render(ctx, opts = {}) {
@@ -279,7 +296,7 @@
       if (this.gurgleWarn || this.gurgleAnim > 0) {
         const s = 1 + Math.sin(t * 20) * 0.08;
         ctx.save(); ctx.translate(this.cx, 300); ctx.scale(s, s);
-        GP.text(ctx, 'GURGLE!', 0, 0, { size: 44, color: '#b6f06a' });
+        GP.text(ctx, this.missFlash > 0 ? 'MISS! RUMBLE!' : 'RUMBLE!', 0, 0, { size: 44, color: '#b6f06a' });
         ctx.restore();
       }
       if (opts.hud !== false) {
@@ -297,10 +314,10 @@
   SnackStack.info = {
     id: 'stack', stage: 'The Stomach', title: 'Snack Stack', color: '#ff6f91', icon: 'stomach',
     howto: [
-      'Snacks swing back and forth on the spoon.',
-      'TAP to drop a snack into the stomach.',
-      'Pack in as many as you can below the FULL LINE!',
-      'Watch out — the stomach GURGLES and bounces food out!',
+      'Snacks swing overhead. TAP fast to drop them in!',
+      'Pack the stomach up to the FULL LINE.',
+      'MISS and the stomach RUMBLES food out!',
+      'The fuller it gets, the faster it swings!',
     ],
   };
   GP.GAMES = GP.GAMES || [];
