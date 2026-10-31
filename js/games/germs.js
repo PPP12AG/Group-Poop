@@ -6,7 +6,7 @@
   const AREA = { x: 30, y: 130, w: W - 60, h: 760 };
   const N_GOOD = 12;
   // friends live inside this ellipse, well away from where germs sneak in
-  const SAFE = { cx: W / 2, cy: 500, rx: 145, ry: 250 };
+  const SAFE = { cx: W / 2, cy: 500, rx: 160, ry: 270 };
 
   function drawGood(ctx, g, t) {
     const r = g.r, bob = Math.sin(t * 4 + g.seed) * 2;
@@ -138,8 +138,8 @@
       // (never out by the edges, so there's always time to save them)
       const damp = Math.pow(0.94, dt * 60);
       for (const g of this.goods) {
-        g.wander += dt * this.rng.range(-3, 3);
-        g.vx += Math.cos(g.wander) * 260 * dt; g.vy += Math.sin(g.wander) * 260 * dt;
+        g.wander += dt * this.rng.range(-5, 5);
+        g.vx += Math.cos(g.wander) * 760 * dt; g.vy += Math.sin(g.wander) * 760 * dt;
         g.scared = Math.max(0, g.scared - dt);
         for (const b of this.bads) {
           const d = Math.hypot(g.x - b.x, g.y - b.y);
