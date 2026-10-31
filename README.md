@@ -1,5 +1,7 @@
 # Group Poop 💩
 
+![Group Poop preview](docs/preview.png)
+
 A silly, cartoony party game for 1–4 players. Four friends walk into a public restroom,
 sit down... and then the camera zooms *inside*. Your little Gut Buddy drops into your
 stomach and races through the digestive system in four quick mini-games.
