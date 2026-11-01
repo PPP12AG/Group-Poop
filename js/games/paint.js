@@ -4,6 +4,7 @@
 // You earn points the whole time for how much is glowing, times your block COMBO.
 (function () {
   const GP = window.GP, W = GP.W, H = GP.H;
+  const SWIPE_NEED = 30; // px of swipe needed to block (very forgiving)
   const COLS = 8, ROWS = 11, CS = 58, X0 = (W - COLS * CS) / 2, Y0 = 190;
 
   class NutrientPainter {
@@ -28,20 +29,43 @@
       this.N = this.cells.length;
       this.painting = false; this.px = -100; this.py = -100;
       this.events = []; // enzyme washes
-      this.nextWash = 2.0; this.nextSplash = 3.2;
+      this.nextWash = 1.5; this.nextSplash = 2.4;
       this.parts = new GP.Particles();
       this.paintSfx = 0;
       this.bot = { x: W / 2, y: H / 2, tx: W / 2, ty: H / 2, retarget: 0, lift: 0, block: null };
-      this.lastX = null; this.lastY = null;
-      this.mult = 1; this.pts = 0; this.covSum = 0; this.blocked = 0; this.washed = 0;
+            this.mult = 1; this.pts = 0; this.covSum = 0; this.blocked = 0; this.washed = 0;
       this.floaters = [];
     }
     addCell(r, c) {
       const cell = { r, c, x: X0 + c * CS + CS / 2, y: Y0 + r * CS + CS / 2, lv: 0, i: this.cells.length, wig: this.rng() * 6 };
       this.cells.push(cell); this.path.push(cell);
     }
-    down(x, y) { this.painting = true; this.px = x; this.py = y; }
-    move(x, y) { this.px = x; this.py = y; }
+    down(x, y) { this.painting = true; this.px = x; this.py = y; this.swipeThrough(x, y, x, y); }
+    move(x, y) {
+      if (this.painting) this.swipeThrough(this.px, this.py, x, y);
+      this.px = x; this.py = y;
+    }
+    // any swipe that passes through a wash (warning or already moving) blocks it,
+    // in any direction, even a quick flick
+    inZone(e, x, y) {
+      if (e.type === 'wave') {
+        const y0 = Y0 + e.r * CS;
+        return y > y0 - 30 && y < y0 + CS + 30 && x > X0 - 40 && x < X0 + COLS * CS + 40;
+      }
+      return Math.hypot(x - e.x, y - e.y) < e.rad + 30;
+    }
+    swipeThrough(x0, y0, x1, y1) {
+      if (this.t >= this.duration) return;
+      const len = Math.hypot(x1 - x0, y1 - y0), steps = Math.max(1, Math.ceil(len / 8));
+      for (const e of this.events) {
+        if (e.blocked || e.done || e.t > e.warn + e.dur) continue;
+        let hits = 0;
+        for (let i = 0; i <= steps; i++) if (this.inZone(e, GP.lerp(x0, x1, i / steps), GP.lerp(y0, y1, i / steps))) hits++;
+        if (!hits) continue;
+        e.swipe += 5 + len * (hits / (steps + 1));
+        if (e.swipe >= SWIPE_NEED) this.block(e);
+      }
+    }
     up() { this.painting = false; }
     coverage() {
       let s = 0;
@@ -84,7 +108,7 @@
           const dx = tx - b.x, dy = ty - b.y, d = Math.hypot(dx, dy);
           if (d < 8) bl.pts.shift();
           else { const m = Math.min(d, speed * dt); b.x += (dx / d) * m; b.y += (dy / d) * m; }
-          this.painting = true; this.px = b.x; this.py = b.y;
+          if (!this.painting) this.down(b.x, b.y); else this.move(b.x, b.y);
           return;
         }
       }
@@ -106,7 +130,7 @@
       const dx = b.cell.x - b.x, dy = b.cell.y - b.y, d = Math.hypot(dx, dy);
       if (d > 1) { const m = Math.min(d, speed * dt); b.x += (dx / d) * m; b.y += (dy / d) * m; }
       b.x += this.rng.normal() * (1 - sk) * 6; b.y += this.rng.normal() * (1 - sk) * 6;
-      this.painting = true; this.px = b.x; this.py = b.y;
+      if (!this.painting) this.down(b.x, b.y); else this.move(b.x, b.y);
     }
     update(dt) {
       if (this.finished) return;
@@ -129,27 +153,13 @@
         this.paintSfx -= dt;
         if (any && this.paintSfx <= 0) { this.sfx('tap'); this.paintSfx = 0.12; }
       }
-      // swiping across an incoming wash (during its warning) blocks it
-      const moved = this.painting && this.lastX != null ? Math.hypot(this.px - this.lastX, this.py - this.lastY) : 0;
-      this.lastX = this.painting ? this.px : null; this.lastY = this.painting ? this.py : null;
-      if (moved > 0 && live) {
-        for (const e of this.events) {
-          if (e.blocked || e.t >= e.warn) continue;
-          let inside;
-          if (e.type === 'wave') { const y = Y0 + e.r * CS; inside = this.py > y - 10 && this.py < y + CS + 10 && this.px > X0 - 30 && this.px < X0 + COLS * CS + 30; }
-          else inside = Math.hypot(this.px - e.x, this.py - e.y) < e.rad + 10;
-          if (!inside) continue;
-          e.swipe += moved;
-          if (e.swipe >= (e.type === 'wave' ? 170 : 110)) this.block(e);
-        }
-      }
       if (live) {
         // washes come faster and faster toward the end
         const p = this.t / this.duration;
-        const k = 1 + p * p * 2.6;
+        const k = 1 + p * 0.8 + p * p * 2.6;
         this.nextWash -= dt * k; this.nextSplash -= dt * k;
-        if (this.nextWash <= 0) { this.spawnWash(); this.nextWash = this.rng.range(1.9, 2.6); }
-        if (this.nextSplash <= 0) { this.spawnSplash(); this.nextSplash = this.rng.range(2.0, 2.8); }
+        if (this.nextWash <= 0) { this.spawnWash(); this.nextWash = this.rng.range(1.4, 2.0); }
+        if (this.nextSplash <= 0) { this.spawnSplash(); this.nextSplash = this.rng.range(1.6, 2.2); }
         // points trickle in the whole round: how much is glowing x your combo
         const cov = this.coverage();
         this.covSum += cov * dt;
@@ -244,7 +254,7 @@
             const a = 0.35 + Math.sin(e.t * 18) * 0.25;
             ctx.fillStyle = `rgba(110,200,255,${a})`;
             GP.rr(ctx, X0, y + 4, COLS * CS, CS - 8, 20); ctx.fill();
-            const sw = GP.clamp(e.swipe / 170, 0, 1);
+            const sw = GP.clamp(e.swipe / SWIPE_NEED, 0, 1);
             if (sw > 0) { ctx.fillStyle = 'rgba(255,230,120,0.55)'; GP.rr(ctx, X0, y + 4, COLS * CS * sw, CS - 8, 20); ctx.fill(); }
             GP.text(ctx, e.dir > 0 ? '>> SWIPE TO BLOCK! >>' : '<< SWIPE TO BLOCK! <<', W / 2, y + CS / 2, { size: 18, color: '#e6f7ff' });
           } else {
@@ -259,7 +269,7 @@
           if (e.t < e.warn) {
             ctx.strokeStyle = 'rgba(120,210,255,0.9)'; ctx.lineWidth = 4; ctx.setLineDash([8, 8]);
             ctx.beginPath(); ctx.arc(e.x, e.y, e.rad * (1.2 - (e.t / e.warn) * 0.2), 0, Math.PI * 2); ctx.stroke(); ctx.setLineDash([]);
-            if (e.swipe > 0) { ctx.fillStyle = `rgba(255,230,120,${0.5 * GP.clamp(e.swipe / 110, 0, 1)})`; GP.ell(ctx, e.x, e.y, e.rad, e.rad); ctx.fill(); }
+            if (e.swipe > 0) { ctx.fillStyle = `rgba(255,230,120,${0.5 * GP.clamp(e.swipe / SWIPE_NEED, 0, 1)})`; GP.ell(ctx, e.x, e.y, e.rad, e.rad); ctx.fill(); }
             GP.text(ctx, 'SWIPE!', e.x, e.y + e.rad * 0.55, { size: 16, color: '#e6f7ff', lw: 4 });
             // falling bile droplet
             const fy = GP.lerp(e.y - 180, e.y, GP.ease.inCubic(e.t / e.warn));
@@ -303,7 +313,7 @@
     id: 'paint', stage: 'The Small Intestine', title: 'Nutrient Painter', color: '#ffb347', icon: 'small',
     howto: [
       'DRAG to paint the wiggly villi with nutrients.',
-      'Blue ENZYME WASHES are coming. SWIPE across them to BLOCK!',
+      'See a blue ENZYME WASH coming? SWIPE it to BLOCK it!',
       'You score the WHOLE time for how much is glowing.',
       'Blocks raise your COMBO. Washes that hit lower it.',
     ],

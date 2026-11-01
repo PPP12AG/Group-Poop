@@ -18,3 +18,4 @@ button.big:active { transform: translateY(4px); box-shadow: 0 2px 0 rgba(40,10,6
 .hint { text-align: center; font-size: 14px; color: #8a6aa0; font-weight: 700; }
 .tiny { margin-top: 4px; }
 button.link { background: none; border: none; font: inherit; font-weight: 800; color: #6c5ce7; font-size: 15px; padding: 4px 8px; }
+.ver { align-self: center; font-size: 13px; font-weight: 700; color: #b9a7c9; }
